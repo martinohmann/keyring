@@ -42,6 +42,8 @@ func newSetCommand() *cobra.Command {
 				fmt.Fprint(cmd.OutOrStdout(), "Enter Password: ")
 
 				password, err = term.ReadPassword(int(os.Stdin.Fd()))
+
+				fmt.Fprintln(cmd.OutOrStdout())
 			}
 
 			if err != nil {
