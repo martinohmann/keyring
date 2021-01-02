@@ -42,7 +42,7 @@ Store secret in keyring, interactive secret prompt:
 ```bash
 $ keyring set myservice myuser
 
-Enter Secret:
+enter secret:
 ```
 
 Delete secret from keyring:

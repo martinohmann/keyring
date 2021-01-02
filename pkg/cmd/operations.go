@@ -34,7 +34,7 @@ func newSetCommand() *cobra.Command {
 
 			# Secret via interactive prompt
 			$ keyring set myservice myuser
-			Enter Secret:`),
+			enter secret:`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
