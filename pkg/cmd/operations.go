@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 
@@ -34,23 +35,7 @@ func newSetCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
 
-			fi, err := os.Stdin.Stat()
-			if err != nil {
-				return err
-			}
-
-			var secret []byte
-
-			if (fi.Mode() & os.ModeCharDevice) == 0 {
-				secret, err = ioutil.ReadAll(os.Stdin)
-			} else {
-				fmt.Fprint(cmd.OutOrStdout(), "Enter Secret: ")
-
-				secret, err = term.ReadPassword(int(os.Stdin.Fd()))
-
-				fmt.Fprintln(cmd.OutOrStdout())
-			}
-
+			secret, err := readSecret(cmd.InOrStdin())
 			if err != nil {
 				return err
 			}
@@ -88,9 +73,7 @@ func newGetCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), secret)
-
-			return nil
+			return writeSecret(cmd.OutOrStdout(), secret)
 		},
 	}
 
@@ -121,4 +104,35 @@ func newDeleteCommand() *cobra.Command {
 	}
 
 	return cmd
+}
+
+type fder interface {
+	Fd() uintptr
+}
+
+// writeSecret writes the secret to w. If w is a terminal, the secret will be
+// newline-terminated.
+func writeSecret(w io.Writer, secret string) (err error) {
+	f, ok := w.(fder)
+	if !ok || !term.IsTerminal(int(f.Fd())) {
+		_, err = w.Write([]byte(secret))
+	} else {
+		_, err = fmt.Fprintln(w, secret)
+	}
+
+	return
+}
+
+// readSecret reads the secret from r. If r is a terminal, the user will be
+// prompted to enter it interactively.
+func readSecret(r io.Reader) ([]byte, error) {
+	f, ok := r.(fder)
+	if !ok || !term.IsTerminal(int(f.Fd())) {
+		return ioutil.ReadAll(r)
+	}
+
+	fmt.Fprint(os.Stdout, "Enter Secret: ")
+	defer fmt.Fprintln(os.Stdout)
+
+	return term.ReadPassword(int(f.Fd()))
 }

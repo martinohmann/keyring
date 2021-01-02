@@ -30,13 +30,18 @@ func TestGetCommand(t *testing.T) {
 
 	cmd.SetOut(&buf)
 	require.NoError(cmd.Execute())
-	require.Equal("supersecret\n", buf.String())
+	require.Equal("supersecret", buf.String())
 }
 
 func TestSetCommand(t *testing.T) {
 	require := require.New(t)
 
 	keyring.MockInit()
+
+	cmd := newSetCommand()
+	cmd.SetOut(ioutil.Discard)
+
+	require.Error(cmd.Execute())
 
 	r, w, err := os.Pipe()
 	require.NoError(err)
@@ -45,15 +50,7 @@ func TestSetCommand(t *testing.T) {
 	require.NoError(err)
 	require.NoError(w.Close())
 
-	stdin := os.Stdin
-	defer func() { os.Stdin = stdin }()
-	os.Stdin = r
-
-	cmd := newSetCommand()
-	cmd.SetOut(ioutil.Discard)
-
-	require.Error(cmd.Execute())
-
+	cmd.SetIn(r)
 	cmd.SetArgs([]string{"myservice", "myuser"})
 
 	var buf bytes.Buffer
