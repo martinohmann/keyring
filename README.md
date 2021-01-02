@@ -16,27 +16,27 @@ $ go get -u github.com/martinohmann/keyring/cmd/keyring
 
 ## Usage
 
-Read password from keyring:
+Read secret from keyring:
 
 ```bash
 $ keyring get myservice myuser
 ```
 
-Store password in keyring, read password from stdin:
+Store secret in keyring, read secret from stdin:
 
 ```bash
 $ echo -n "supersecret" | keyring set myservice myuser
 ```
 
-Store password in keyring, interactive password prompt:
+Store secret in keyring, interactive secret prompt:
 
 ```bash
 $ keyring set myservice myuser
 
-Enter Password:
+Enter Secret:
 ```
 
-Delete password from keyring:
+Delete secret from keyring:
 
 ```bash
 $ keyring delete myservice myuser

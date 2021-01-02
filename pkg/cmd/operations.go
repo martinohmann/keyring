@@ -18,18 +18,18 @@ const (
 func newSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set [service] [user]",
-		Short: "Set password in keyring",
+		Short: "Set secret in keyring",
 		Long: longDesc(`
-			Sets a password for a service/user combination in the keyring.
+			Sets a secret for a service/user combination in the keyring.
 
-			If stdin is a pipe, the password is read from there. Otherwise it will prompt for the password interactively.`),
+			If stdin is a pipe, the secret is read from there. Otherwise it will prompt for the secret interactively.`),
 		Example: example(`
-			# Password via stdin
+			# Secret via stdin
 			$ echo -n "supersecret" | keyring set myservice myuser
 
-			# Password via interactive prompt
+			# Secret via interactive prompt
 			$ keyring set myservice myuser
-			Enter Password:`),
+			Enter Secret:`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
@@ -39,14 +39,14 @@ func newSetCommand() *cobra.Command {
 				return err
 			}
 
-			var password []byte
+			var secret []byte
 
 			if (fi.Mode() & os.ModeCharDevice) == 0 {
-				password, err = ioutil.ReadAll(os.Stdin)
+				secret, err = ioutil.ReadAll(os.Stdin)
 			} else {
-				fmt.Fprint(cmd.OutOrStdout(), "Enter Password: ")
+				fmt.Fprint(cmd.OutOrStdout(), "Enter Secret: ")
 
-				password, err = term.ReadPassword(int(os.Stdin.Fd()))
+				secret, err = term.ReadPassword(int(os.Stdin.Fd()))
 
 				fmt.Fprintln(cmd.OutOrStdout())
 			}
@@ -55,7 +55,7 @@ func newSetCommand() *cobra.Command {
 				return err
 			}
 
-			err = keyring.Set(service, user, string(password))
+			err = keyring.Set(service, user, string(secret))
 			if err != nil {
 				return err
 			}
@@ -72,23 +72,23 @@ func newSetCommand() *cobra.Command {
 func newGetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [service] [user]",
-		Short: "Read password from keyring",
+		Short: "Read secret from keyring",
 		Long: longDesc(`
-			Reads a password for a service/user combination from the keyring and writes it to stdout.
+			Reads a secret for a service/user combination from the keyring and writes it to stdout.
 
-			The returned password is terminated by a newline character.`),
+			The returned secret is terminated by a newline character.`),
 		Example: example(`
 			$ keyring get myservice myuser`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
 
-			password, err := keyring.Get(service, user)
+			secret, err := keyring.Get(service, user)
 			if err != nil {
 				return err
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), password)
+			fmt.Fprintln(cmd.OutOrStdout(), secret)
 
 			return nil
 		},
@@ -100,9 +100,9 @@ func newGetCommand() *cobra.Command {
 func newDeleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete [service] [user]",
-		Short: "Delete password from keyring",
+		Short: "Delete secret from keyring",
 		Long: longDesc(`
-			Deletes the password for a service/user combination from the keyring.`),
+			Deletes the secret for a service/user combination from the keyring.`),
 		Example: example(`
 			$ keyring delete myservice myuser`),
 		Args: cobra.ExactArgs(2),

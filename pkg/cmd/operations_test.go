@@ -62,9 +62,9 @@ func TestSetCommand(t *testing.T) {
 	require.NoError(cmd.Execute())
 	require.Equal(secretSavedMsg+"\n", buf.String())
 
-	password, err := keyring.Get("myservice", "myuser")
+	secret, err := keyring.Get("myservice", "myuser")
 	require.NoError(err)
-	require.Equal("mypass", password)
+	require.Equal("mypass", secret)
 }
 
 func TestDeleteCommand(t *testing.T) {
