@@ -22,12 +22,10 @@ func TestGetCommand(t *testing.T) {
 
 	require.NoError(keyring.Set(testService, testUser, testSecret))
 
-	cmd := newRootCommand()
-	cmd.SetOut(ioutil.Discard)
-	cmd.SetArgs([]string{"get", testService, testUser})
-
 	var buf bytes.Buffer
 
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"get", testService, testUser})
 	cmd.SetOut(&buf)
 
 	require.NoError(cmd.Execute())
