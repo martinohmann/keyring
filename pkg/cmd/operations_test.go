@@ -3,11 +3,16 @@ package cmd
 import (
 	"bytes"
 	"io/ioutil"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	keyring "github.com/zalando/go-keyring"
+)
+
+const (
+	testService = "the-service"
+	testUser    = "the-user"
+	testSecret  = "the-secret"
 )
 
 func TestGetCommand(t *testing.T) {
@@ -15,22 +20,30 @@ func TestGetCommand(t *testing.T) {
 
 	keyring.MockInit()
 
-	cmd := newGetCommand()
+	require.NoError(keyring.Set(testService, testUser, testSecret))
+
+	cmd := newRootCommand()
 	cmd.SetOut(ioutil.Discard)
-
-	require.Error(cmd.Execute())
-
-	cmd.SetArgs([]string{"myservice", "myuser"})
-
-	require.Error(cmd.Execute())
-
-	require.NoError(keyring.Set("myservice", "myuser", "supersecret"))
+	cmd.SetArgs([]string{"get", testService, testUser})
 
 	var buf bytes.Buffer
 
 	cmd.SetOut(&buf)
+
 	require.NoError(cmd.Execute())
-	require.Equal("supersecret", buf.String())
+	require.Equal(testSecret, buf.String())
+}
+
+func TestGetCommand_NotFound(t *testing.T) {
+	require := require.New(t)
+
+	keyring.MockInit()
+
+	cmd := newRootCommand()
+	cmd.SetOut(ioutil.Discard)
+	cmd.SetArgs([]string{"get", testService, testUser})
+
+	require.Error(cmd.Execute())
 }
 
 func TestSetCommand(t *testing.T) {
@@ -38,30 +51,22 @@ func TestSetCommand(t *testing.T) {
 
 	keyring.MockInit()
 
-	cmd := newSetCommand()
-	cmd.SetOut(ioutil.Discard)
-
-	require.Error(cmd.Execute())
-
-	r, w, err := os.Pipe()
-	require.NoError(err)
-
-	_, err = w.Write([]byte(`mypass`))
-	require.NoError(err)
-	require.NoError(w.Close())
-
-	cmd.SetIn(r)
-	cmd.SetArgs([]string{"myservice", "myuser"})
+	_, err := keyring.Get(testService, testUser)
+	require.Error(err)
 
 	var buf bytes.Buffer
 
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"set", testService, testUser})
+	cmd.SetIn(bytes.NewBuffer([]byte(testSecret)))
 	cmd.SetOut(&buf)
+
 	require.NoError(cmd.Execute())
 	require.Equal(secretSavedMsg+"\n", buf.String())
 
-	secret, err := keyring.Get("myservice", "myuser")
+	secret, err := keyring.Get(testService, testUser)
 	require.NoError(err)
-	require.Equal("mypass", secret)
+	require.Equal(testSecret, secret)
 }
 
 func TestDeleteCommand(t *testing.T) {
@@ -69,20 +74,29 @@ func TestDeleteCommand(t *testing.T) {
 
 	keyring.MockInit()
 
-	cmd := newDeleteCommand()
-	cmd.SetOut(ioutil.Discard)
-
-	require.Error(cmd.Execute())
-
-	cmd.SetArgs([]string{"myservice", "myuser"})
-
-	require.Error(cmd.Execute())
-
-	require.NoError(keyring.Set("myservice", "myuser", "supersecret"))
+	require.NoError(keyring.Set(testService, testUser, testSecret))
 
 	var buf bytes.Buffer
 
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"delete", testService, testUser})
 	cmd.SetOut(&buf)
+
 	require.NoError(cmd.Execute())
 	require.Equal(secretDeletedMsg+"\n", buf.String())
+
+	_, err := keyring.Get(testService, testUser)
+	require.Error(err)
+}
+
+func TestDeleteCommand_NotFound(t *testing.T) {
+	require := require.New(t)
+
+	keyring.MockInit()
+
+	cmd := newRootCommand()
+	cmd.SetOut(ioutil.Discard)
+	cmd.SetArgs([]string{"delete", testService, testUser})
+
+	require.Error(cmd.Execute())
 }

@@ -17,15 +17,15 @@ func newRootCommand() *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(newSetCommand())
+	cmd.AddCommand(newGetCommand())
+	cmd.AddCommand(newDeleteCommand())
+
 	return cmd
 }
 
 func Execute() {
 	cmd := newRootCommand()
-
-	cmd.AddCommand(newSetCommand())
-	cmd.AddCommand(newGetCommand())
-	cmd.AddCommand(newDeleteCommand())
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
