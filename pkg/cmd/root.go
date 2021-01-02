@@ -7,12 +7,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Version is set via build args.
+var version = "v0.0.0-master"
+
 func newRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "keyring",
+		Short:         "Interact with the operating system's keyring.",
+		Version:       version,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Do not display usage after successful command parsing.
+			// Do not display usage on errors that happen after successful
+			// command parsing.
 			cmd.SilenceUsage = true
 		},
 	}
