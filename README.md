@@ -16,10 +16,16 @@ $ go get -u github.com/martinohmann/keyring/cmd/keyring
 
 ## Usage
 
-Read secret from keyring:
+Write secret from keyring to stdout:
 
 ```bash
 $ keyring get myservice myuser
+```
+
+Pipe secret from keyring into another command:
+
+```bash
+$ keyring get myservice myuser | cat
 ```
 
 Store secret in keyring, read secret from stdin:

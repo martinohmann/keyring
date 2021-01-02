@@ -61,9 +61,13 @@ func newGetCommand() *cobra.Command {
 		Long: longDesc(`
 			Reads a secret for a service/user combination from the keyring and writes it to stdout.
 
-			The returned secret is terminated by a newline character.`),
+			If stdout is a terminal a newline character is printed after the secret.`),
 		Example: example(`
-			$ keyring get myservice myuser`),
+			# Write secret to stdout
+			$ keyring get myservice myuser
+
+			# Pipe secret into another command
+			$ keyring get myservice myuser | cat`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
