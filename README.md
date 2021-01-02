@@ -10,6 +10,9 @@ Simple commandline wrapper around [zalando/go-keyring](https://github.com/zaland
 
 ## Installation
 
+Download the [latest binary release](https://github.com/martinohmann/keyring/releases)
+for your platform or install via `go get`:
+
 ```bash
 $ go get -u github.com/martinohmann/keyring/cmd/keyring
 ```
