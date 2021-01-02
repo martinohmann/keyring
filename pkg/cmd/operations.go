@@ -19,12 +19,12 @@ func newSetCommand() *cobra.Command {
 
 			If stdin is a pipe, the password is read from there. Otherwise it will prompt for the password interactively.`),
 		Example: example(`
-		    # Password via stdin 
-		    $ echo -n "supersecret" | keyring set myservice myuser
+			# Password via stdin
+			$ echo -n "supersecret" | keyring set myservice myuser
 
-		    # Password via interactive prompt 
-		    $ keyring set myservice myuser
-		    Enter Password:`),
+			# Password via interactive prompt
+			$ keyring set myservice myuser
+			Enter Password:`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
@@ -73,7 +73,7 @@ func newGetCommand() *cobra.Command {
 
 			The returned password is terminated by a newline character.`),
 		Example: example(`
-		    $ keyring get myservice myuser`),
+			$ keyring get myservice myuser`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
@@ -99,7 +99,7 @@ func newDeleteCommand() *cobra.Command {
 		Long: longDesc(`
 			Deletes the password for a service/user combination from the keyring.`),
 		Example: example(`
-		    $ keyring delete myservice myuser`),
+			$ keyring delete myservice myuser`),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, user := args[0], args[1]
