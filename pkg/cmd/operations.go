@@ -10,6 +10,11 @@ import (
 	"golang.org/x/term"
 )
 
+const (
+	secretSavedMsg   = "secret saved"
+	secretDeletedMsg = "secret deleted"
+)
+
 func newSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set [service] [user]",
@@ -55,7 +60,7 @@ func newSetCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "password for service=%q,user=%q set\n", service, user)
+			fmt.Fprintln(cmd.OutOrStdout(), secretSavedMsg)
 
 			return nil
 		},
@@ -109,7 +114,7 @@ func newDeleteCommand() *cobra.Command {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "password for service=%q,user=%q deleted\n", service, user)
+			fmt.Fprintln(cmd.OutOrStdout(), secretDeletedMsg)
 
 			return nil
 		},

@@ -60,7 +60,7 @@ func TestSetCommand(t *testing.T) {
 
 	cmd.SetOut(&buf)
 	require.NoError(cmd.Execute())
-	require.Equal("password for service=\"myservice\",user=\"myuser\" set\n", buf.String())
+	require.Equal(secretSavedMsg+"\n", buf.String())
 
 	password, err := keyring.Get("myservice", "myuser")
 	require.NoError(err)
@@ -87,5 +87,5 @@ func TestDeleteCommand(t *testing.T) {
 
 	cmd.SetOut(&buf)
 	require.NoError(cmd.Execute())
-	require.Equal("password for service=\"myservice\",user=\"myuser\" deleted\n", buf.String())
+	require.Equal(secretDeletedMsg+"\n", buf.String())
 }
