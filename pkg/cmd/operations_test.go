@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	keyring "github.com/zalando/go-keyring"
 )
@@ -17,194 +19,232 @@ const (
 	testSecret  = "the-secret"
 )
 
-func TestGetCommand(t *testing.T) {
-	require := require.New(t)
+var testCases = []struct {
+	name        string
+	args        []string
+	stdin       io.Reader
+	stdout      io.Writer
+	expectedErr error
+	setup       func(t *testing.T, cmd *cobra.Command) (cleanup func())
+	assert      func(t *testing.T, cmd *cobra.Command)
+}{
+	{
+		name:   "read existing secret",
+		args:   []string{"get", testService, testUser},
+		stdout: bytes.NewBuffer(nil),
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
+		},
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			buf := cmd.OutOrStdout().(*bytes.Buffer)
+			require.Equal(t, testSecret, buf.String())
+		},
+	},
+	{
+		name:        "read nonexistent secret -> error",
+		args:        []string{"get", testService, testUser},
+		expectedErr: keyring.ErrNotFound,
+	},
+	{
+		name:  "create secret",
+		args:  []string{"set", testService, testUser},
+		stdin: bytes.NewBuffer([]byte(testSecret)),
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret)
+		},
+	},
+	{
+		name: "create secret interactively",
+		args: []string{"set", testService, testUser},
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			if runtime.GOOS != "linux" {
+				t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+			}
 
-	keyring.MockInit()
+			ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+			require.NoError(t, err)
 
-	require.NoError(keyring.Set(testService, testUser, testSecret))
+			cmd.SetIn(ptmx)
 
-	var buf bytes.Buffer
+			// write secret to stdin
+			_, err = ptmx.Write([]byte(testSecret + "\r\n"))
+			require.NoError(t, err)
 
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"get", testService, testUser})
-	cmd.SetOut(&buf)
+			return func() { ptmx.Close() }
+		},
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret)
+		},
+	},
+	{
+		name:        "stdin broken pipe while creating secret -> error",
+		args:        []string{"set", testService, testUser},
+		stdin:       badReader{},
+		expectedErr: io.ErrClosedPipe,
+	},
+	{
+		name:  "update existing secret from stdin with --yes flag",
+		args:  []string{"set", testService, testUser, "--yes"},
+		stdin: bytes.NewBuffer([]byte(testSecret + "new")),
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
+		},
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret+"new")
+		},
+	},
+	{
+		name:  "update existing secret from stdin without --yes flag -> error",
+		args:  []string{"set", testService, testUser},
+		stdin: bytes.NewBuffer([]byte(testSecret + "new")),
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
+		},
+		expectedErr: errConfirmationRequired,
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret)
+		},
+	},
+	{
+		name: "delete existing secret with --yes flag",
+		args: []string{"delete", testService, testUser, "--yes"},
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
+		},
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretNotExists(t, testService, testUser)
+		},
+	},
+	{
+		name: "delete existing secret without --yes flag -> error",
+		args: []string{"delete", testService, testUser},
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
+		},
+		expectedErr: errConfirmationRequired,
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret)
+		},
+	},
+	{
+		name: "delete existing secret interactively, user aborts",
+		args: []string{"delete", testService, testUser},
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			if runtime.GOOS != "linux" {
+				t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+			}
 
-	require.NoError(cmd.Execute())
-	require.Equal(testSecret, buf.String())
+			ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+			require.NoError(t, err)
+
+			createSecret(t, testService, testUser, testSecret)
+
+			cmd.SetIn(ptmx)
+
+			// reject deletion prompt
+			_, err = ptmx.Write([]byte(`n`))
+			require.NoError(t, err)
+
+			return func() { ptmx.Close() }
+		},
+		expectedErr: errAborted,
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretEquals(t, testService, testUser, testSecret)
+		},
+	},
+	{
+		name: "delete existing secret interactively, user confirms",
+		args: []string{"delete", testService, testUser},
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			if runtime.GOOS != "linux" {
+				t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+			}
+
+			ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+			require.NoError(t, err)
+
+			createSecret(t, testService, testUser, testSecret)
+
+			cmd.SetIn(ptmx)
+
+			// confirm deletion prompt
+			_, err = ptmx.Write([]byte(`y`))
+			require.NoError(t, err)
+
+			return func() { ptmx.Close() }
+		},
+		assert: func(t *testing.T, cmd *cobra.Command) {
+			assertSecretNotExists(t, testService, testUser)
+		},
+	},
+	{
+		name:        "delete nonexistent secret -> error",
+		args:        []string{"delete", testService, testUser},
+		expectedErr: keyring.ErrNotFound,
+	},
 }
 
-func TestGetCommand_NotFound(t *testing.T) {
-	require := require.New(t)
+func TestOperations(t *testing.T) {
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			require := require.New(t)
 
-	keyring.MockInit()
+			keyring.MockInit()
 
-	cmd := newRootCommand()
-	cmd.SetOut(ioutil.Discard)
-	cmd.SetArgs([]string{"get", testService, testUser})
+			cmd := newRootCommand()
+			cmd.SetArgs(test.args)
+			cmd.SetOut(ioutil.Discard)
 
-	require.Error(cmd.Execute())
-}
+			if test.stdin != nil {
+				cmd.SetIn(test.stdin)
+			}
 
-func TestSetCommand_Create(t *testing.T) {
-	require := require.New(t)
+			if test.stdout != nil {
+				cmd.SetOut(test.stdout)
+			}
 
-	keyring.MockInit()
+			if test.setup != nil {
+				if cleanup := test.setup(t, cmd); cleanup != nil {
+					defer cleanup()
+				}
+			}
 
-	_, err := keyring.Get(testService, testUser)
-	require.Error(err)
+			err := cmd.Execute()
+			if test.expectedErr == nil {
+				require.NoError(err)
+			} else {
+				require.EqualError(err, test.expectedErr.Error())
+			}
 
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"set", testService, testUser})
-	cmd.SetIn(bytes.NewBuffer([]byte(testSecret)))
-	cmd.SetOut(ioutil.Discard)
-
-	require.NoError(cmd.Execute())
-
-	secret, err := keyring.Get(testService, testUser)
-	require.NoError(err)
-	require.Equal(testSecret, secret)
-}
-
-func TestSetCommand_UpdateAutoConfirm(t *testing.T) {
-	require := require.New(t)
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"set", testService, testUser, "--yes"})
-	cmd.SetIn(bytes.NewBuffer([]byte(testSecret + "new")))
-	cmd.SetOut(ioutil.Discard)
-
-	require.NoError(cmd.Execute())
-
-	secret, err := keyring.Get(testService, testUser)
-	require.NoError(err)
-	require.Equal(testSecret+"new", secret)
-}
-
-func TestSetCommand_UpdateAbort(t *testing.T) {
-	require := require.New(t)
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"set", testService, testUser})
-	cmd.SetIn(bytes.NewBuffer([]byte(testSecret + "new")))
-	cmd.SetOut(ioutil.Discard)
-
-	require.Error(cmd.Execute())
-
-	secret, err := keyring.Get(testService, testUser)
-	require.NoError(err)
-	require.Equal(testSecret, secret)
-}
-
-func TestDeleteCommand_Abort(t *testing.T) {
-	require := require.New(t)
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"delete", testService, testUser})
-	cmd.SetIn(bytes.NewBuffer(nil))
-	cmd.SetOut(ioutil.Discard)
-
-	require.Equal(errConfirmationRequired, cmd.Execute())
-
-	_, err := keyring.Get(testService, testUser)
-	require.NoError(err)
-}
-
-func TestDeleteCommand_AutoConfirm(t *testing.T) {
-	require := require.New(t)
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"delete", testService, testUser, "--yes"})
-	cmd.SetOut(ioutil.Discard)
-
-	require.NoError(cmd.Execute())
-
-	_, err := keyring.Get(testService, testUser)
-	require.Error(err)
-}
-
-func TestDeleteCommand_UserAbort(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+			if test.assert != nil {
+				test.assert(t, cmd)
+			}
+		})
 	}
-
-	require := require.New(t)
-
-	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
-	require.NoError(err)
-	defer ptmx.Close()
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	_, err = ptmx.Write([]byte(`n`))
-	require.NoError(err)
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"delete", testService, testUser})
-	cmd.SetIn(ptmx)
-	cmd.SetOut(ioutil.Discard)
-
-	require.Equal(errAborted, cmd.Execute())
-
-	_, err = keyring.Get(testService, testUser)
-	require.NoError(err)
 }
 
-func TestDeleteCommand_UserConfirm(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
-	}
-
-	require := require.New(t)
-
-	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
-	require.NoError(err)
-	defer ptmx.Close()
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	_, err = ptmx.Write([]byte(`y`))
-	require.NoError(err)
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"delete", testService, testUser})
-	cmd.SetIn(ptmx)
-	cmd.SetOut(ioutil.Discard)
-
-	require.NoError(cmd.Execute())
-
-	_, err = keyring.Get(testService, testUser)
-	require.Error(err)
+func createSecret(t *testing.T, svc, user, pass string) {
+	require.NoError(t, keyring.Set(svc, user, pass))
 }
 
-func TestDeleteCommand_NotFound(t *testing.T) {
-	require := require.New(t)
+func assertSecretNotExists(t *testing.T, svc, user string) {
+	_, err := keyring.Get(svc, user)
+	require.Equal(t, keyring.ErrNotFound, err)
+}
 
-	keyring.MockInit()
+func assertSecretEquals(t *testing.T, svc, user, expected string) {
+	actual, err := keyring.Get(svc, user)
+	require.NoError(t, err)
+	require.Equal(t, expected, actual)
+}
 
-	cmd := newRootCommand()
-	cmd.SetOut(ioutil.Discard)
-	cmd.SetArgs([]string{"delete", testService, testUser})
+type badReader struct{}
 
-	require.Error(cmd.Execute())
+func (badReader) Read(_ []byte) (int, error) {
+	return 0, io.ErrClosedPipe
 }
