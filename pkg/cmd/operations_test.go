@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"io/ioutil"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,37 +54,31 @@ func TestSetCommand_Create(t *testing.T) {
 	_, err := keyring.Get(testService, testUser)
 	require.Error(err)
 
-	var buf bytes.Buffer
-
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"set", testService, testUser})
 	cmd.SetIn(bytes.NewBuffer([]byte(testSecret)))
-	cmd.SetOut(&buf)
+	cmd.SetOut(ioutil.Discard)
 
 	require.NoError(cmd.Execute())
-	require.Contains(buf.String(), secretCreatedMsg)
 
 	secret, err := keyring.Get(testService, testUser)
 	require.NoError(err)
 	require.Equal(testSecret, secret)
 }
 
-func TestSetCommand_UpdateConfirm(t *testing.T) {
+func TestSetCommand_UpdateAutoConfirm(t *testing.T) {
 	require := require.New(t)
 
 	keyring.MockInit()
 
 	require.NoError(keyring.Set(testService, testUser, testSecret))
 
-	var buf bytes.Buffer
-
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"set", testService, testUser, "--yes"})
 	cmd.SetIn(bytes.NewBuffer([]byte(testSecret + "new")))
-	cmd.SetOut(&buf)
+	cmd.SetOut(ioutil.Discard)
 
 	require.NoError(cmd.Execute())
-	require.Contains(buf.String(), secretUpdatedMsg)
 
 	secret, err := keyring.Get(testService, testUser)
 	require.NoError(err)
@@ -96,39 +92,16 @@ func TestSetCommand_UpdateAbort(t *testing.T) {
 
 	require.NoError(keyring.Set(testService, testUser, testSecret))
 
-	var buf bytes.Buffer
-
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"set", testService, testUser})
 	cmd.SetIn(bytes.NewBuffer([]byte(testSecret + "new")))
-	cmd.SetOut(&buf)
+	cmd.SetOut(ioutil.Discard)
 
 	require.Error(cmd.Execute())
 
 	secret, err := keyring.Get(testService, testUser)
 	require.NoError(err)
 	require.Equal(testSecret, secret)
-}
-
-func TestDeleteCommand_Confirm(t *testing.T) {
-	require := require.New(t)
-
-	keyring.MockInit()
-
-	require.NoError(keyring.Set(testService, testUser, testSecret))
-
-	var buf bytes.Buffer
-
-	cmd := newRootCommand()
-	cmd.SetArgs([]string{"delete", testService, testUser})
-	cmd.SetIn(bytes.NewBuffer([]byte(`y`)))
-	cmd.SetOut(&buf)
-
-	require.NoError(cmd.Execute())
-	require.Contains(buf.String(), secretDeletedMsg)
-
-	_, err := keyring.Get(testService, testUser)
-	require.Error(err)
 }
 
 func TestDeleteCommand_Abort(t *testing.T) {
@@ -138,14 +111,12 @@ func TestDeleteCommand_Abort(t *testing.T) {
 
 	require.NoError(keyring.Set(testService, testUser, testSecret))
 
-	var buf bytes.Buffer
-
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"delete", testService, testUser})
 	cmd.SetIn(bytes.NewBuffer(nil))
-	cmd.SetOut(&buf)
+	cmd.SetOut(ioutil.Discard)
 
-	require.Error(cmd.Execute())
+	require.Equal(errConfirmationRequired, cmd.Execute())
 
 	_, err := keyring.Get(testService, testUser)
 	require.NoError(err)
@@ -158,16 +129,71 @@ func TestDeleteCommand_AutoConfirm(t *testing.T) {
 
 	require.NoError(keyring.Set(testService, testUser, testSecret))
 
-	var buf bytes.Buffer
-
 	cmd := newRootCommand()
 	cmd.SetArgs([]string{"delete", testService, testUser, "--yes"})
-	cmd.SetOut(&buf)
+	cmd.SetOut(ioutil.Discard)
 
 	require.NoError(cmd.Execute())
-	require.Contains(buf.String(), secretDeletedMsg)
 
 	_, err := keyring.Get(testService, testUser)
+	require.Error(err)
+}
+
+func TestDeleteCommand_UserAbort(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+	}
+
+	require := require.New(t)
+
+	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+	require.NoError(err)
+	defer ptmx.Close()
+
+	keyring.MockInit()
+
+	require.NoError(keyring.Set(testService, testUser, testSecret))
+
+	_, err = ptmx.Write([]byte(`n`))
+	require.NoError(err)
+
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"delete", testService, testUser})
+	cmd.SetIn(ptmx)
+	cmd.SetOut(ioutil.Discard)
+
+	require.Equal(errAborted, cmd.Execute())
+
+	_, err = keyring.Get(testService, testUser)
+	require.NoError(err)
+}
+
+func TestDeleteCommand_UserConfirm(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unknown terminal path for GOOS %v", runtime.GOOS)
+	}
+
+	require := require.New(t)
+
+	ptmx, err := os.OpenFile("/dev/ptmx", os.O_RDWR, 0)
+	require.NoError(err)
+	defer ptmx.Close()
+
+	keyring.MockInit()
+
+	require.NoError(keyring.Set(testService, testUser, testSecret))
+
+	_, err = ptmx.Write([]byte(`y`))
+	require.NoError(err)
+
+	cmd := newRootCommand()
+	cmd.SetArgs([]string{"delete", testService, testUser})
+	cmd.SetIn(ptmx)
+	cmd.SetOut(ioutil.Discard)
+
+	require.NoError(cmd.Execute())
+
+	_, err = keyring.Get(testService, testUser)
 	require.Error(err)
 }
 

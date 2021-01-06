@@ -18,7 +18,10 @@ const (
 	secretDeletedMsg = "secret deleted"
 )
 
-var errAborted = errors.New("operation aborted")
+var (
+	errAborted              = errors.New("operation aborted")
+	errConfirmationRequired = errors.New("confirmation required")
+)
 
 func newSetCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -171,8 +174,19 @@ func readSecret(in io.Reader, out io.Writer) ([]byte, error) {
 // ask prints question to out and waits for confirmation input on in. Returns
 // errAborted if the user chose to stop or reading from in failed.
 func ask(in io.Reader, out io.Writer, question string) error {
+	fin, ok := in.(fder)
+	if !ok || !term.IsTerminal(int(fin.Fd())) {
+		return errConfirmationRequired
+	}
+
+	state, err := term.MakeRaw(int(fin.Fd()))
+	if err != nil {
+		return fmt.Errorf("failed to put terminal into raw mode: %w", err)
+	}
+
 	fmt.Fprintf(out, "%s [y/N] ", question)
 	defer fmt.Fprintln(out)
+	defer term.Restore(int(fin.Fd()), state) // nolint: errcheck
 
 	r := bufio.NewReader(in)
 
@@ -188,7 +202,8 @@ func ask(in io.Reader, out io.Writer, question string) error {
 // confirm prompts the user to confirm the question unless the --yes flag is
 // set in cmd.
 func confirm(cmd *cobra.Command, question string) error {
-	if yes, err := cmd.Flags().GetBool("yes"); yes {
+	yes, err := cmd.Flags().GetBool("yes")
+	if yes || err != nil {
 		return err
 	}
 
