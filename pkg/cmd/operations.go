@@ -47,15 +47,20 @@ func newSetCommand() *cobra.Command {
 				return err
 			}
 
-			msg := secretCreatedMsg
+			var msg string
 
 			_, err = keyring.Get(service, user)
-			if err == nil {
+			switch {
+			case errors.Is(err, keyring.ErrNotFound):
+				msg = secretCreatedMsg
+			case err == nil:
 				msg = secretUpdatedMsg
 
 				if err := confirm(cmd, "secret exists, overwrite?"); err != nil {
 					return err
 				}
+			default:
+				return err
 			}
 
 			err = keyring.Set(service, user, string(secret))
@@ -117,10 +122,12 @@ func newDeleteCommand() *cobra.Command {
 			service, user := args[0], args[1]
 
 			_, err := keyring.Get(service, user)
-			if err == nil {
-				if err := confirm(cmd, "delete secret?"); err != nil {
-					return err
-				}
+			if err != nil {
+				return err
+			}
+
+			if err := confirm(cmd, "delete secret?"); err != nil {
+				return err
 			}
 
 			err = keyring.Delete(service, user)
