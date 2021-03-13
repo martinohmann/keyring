@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/martinohmann/exit"
 	"github.com/spf13/cobra"
 	keyring "github.com/zalando/go-keyring"
 	"golang.org/x/term"
@@ -44,7 +45,7 @@ func newSetCommand() *cobra.Command {
 
 			secret, err := readSecret(cmd.InOrStdin(), cmd.OutOrStdout())
 			if err != nil {
-				return err
+				return exit.Error(exit.CodeIOErr, err)
 			}
 
 			var msg string
@@ -102,7 +103,12 @@ func newGetCommand() *cobra.Command {
 				return err
 			}
 
-			return writeSecret(cmd.OutOrStdout(), secret)
+			err = writeSecret(cmd.OutOrStdout(), secret)
+			if err != nil {
+				return exit.Error(exit.CodeIOErr, err)
+			}
+
+			return nil
 		},
 	}
 
@@ -183,12 +189,12 @@ func readSecret(in io.Reader, out io.Writer) ([]byte, error) {
 func ask(in io.Reader, out io.Writer, question string) error {
 	fin, ok := in.(fder)
 	if !ok || !term.IsTerminal(int(fin.Fd())) {
-		return errConfirmationRequired
+		return exit.Error(exit.CodeUsage, errConfirmationRequired)
 	}
 
 	state, err := term.MakeRaw(int(fin.Fd()))
 	if err != nil {
-		return fmt.Errorf("failed to put terminal into raw mode: %w", err)
+		return exit.Errorf(exit.CodeIOErr, "failed to put terminal into raw mode: %w", err)
 	}
 
 	fmt.Fprintf(out, "%s [y/N] ", question)
