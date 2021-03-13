@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/martinohmann/exit"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	keyring "github.com/zalando/go-keyring"
@@ -39,6 +40,16 @@ var testCases = []struct {
 		assert: func(t *testing.T, cmd *cobra.Command) {
 			buf := cmd.OutOrStdout().(*bytes.Buffer)
 			require.Equal(t, testSecret, buf.String())
+		},
+	},
+	{
+		name:        "read existing secret, bad out -> error",
+		args:        []string{"get", testService, testUser},
+		stdout:      badWriter{},
+		expectedErr: exit.Error(exit.CodeIOErr, io.ErrClosedPipe),
+		setup: func(t *testing.T, cmd *cobra.Command) func() {
+			createSecret(t, testService, testUser, testSecret)
+			return nil
 		},
 	},
 	{
@@ -81,7 +92,7 @@ var testCases = []struct {
 		name:        "stdin broken pipe while creating secret -> error",
 		args:        []string{"set", testService, testUser},
 		stdin:       badReader{},
-		expectedErr: io.ErrClosedPipe,
+		expectedErr: exit.Error(exit.CodeIOErr, io.ErrClosedPipe),
 	},
 	{
 		name:  "update existing secret from stdin with --yes flag",
@@ -103,7 +114,7 @@ var testCases = []struct {
 			createSecret(t, testService, testUser, testSecret)
 			return nil
 		},
-		expectedErr: errConfirmationRequired,
+		expectedErr: exit.Error(exit.CodeUsage, errConfirmationRequired),
 		assert: func(t *testing.T, cmd *cobra.Command) {
 			assertSecretEquals(t, testService, testUser, testSecret)
 		},
@@ -126,7 +137,7 @@ var testCases = []struct {
 			createSecret(t, testService, testUser, testSecret)
 			return nil
 		},
-		expectedErr: errConfirmationRequired,
+		expectedErr: exit.Error(exit.CodeUsage, errConfirmationRequired),
 		assert: func(t *testing.T, cmd *cobra.Command) {
 			assertSecretEquals(t, testService, testUser, testSecret)
 		},
@@ -246,5 +257,11 @@ func assertSecretEquals(t *testing.T, svc, user, expected string) {
 type badReader struct{}
 
 func (badReader) Read(_ []byte) (int, error) {
+	return 0, io.ErrClosedPipe
+}
+
+type badWriter struct{}
+
+func (badWriter) Write(_ []byte) (int, error) {
 	return 0, io.ErrClosedPipe
 }
