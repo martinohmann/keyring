@@ -1,6 +1,6 @@
 package main
 
-import "github.com/martinohmann/keyring/pkg/cmd"
+import "github.com/martinohmann/keyring/cmd"
 
 func main() {
 	cmd.Execute()
