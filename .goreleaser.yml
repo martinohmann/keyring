@@ -5,7 +5,7 @@ builds:
     binary: keyring
     ldflags:
       - -s -w
-        -X github.com/martinohmann/keyring/pkg/cmd.version={{.Version}}
+        -X github.com/martinohmann/keyring/cmd.version={{.Version}}
     env:
       - CGO_ENABLED=0
     goos:

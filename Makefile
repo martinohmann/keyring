@@ -12,7 +12,7 @@ help:
 .PHONY: build
 build: ## build keyring
 	go build -ldflags \
-	  "-s -w -X $(PKG_BASE)/pkg/cmd.version=$(shell git describe --tags 2>/dev/null || echo v0.0.0-master)" \
+	  "-s -w -X $(PKG_BASE)/cmd.version=$(shell git describe --tags 2>/dev/null || echo v0.0.0-master)" \
 	  ./cmd/keyring
 
 .PHONY: install
