@@ -14,7 +14,7 @@ Download the [latest binary release](https://github.com/martinohmann/keyring/rel
 for your platform or install via `go get`:
 
 ```bash
-$ go get -u github.com/martinohmann/keyring/cmd/keyring
+$ go install github.com/martinohmann/keyring/cmd/keyring@latest
 ```
 
 ## Usage
