@@ -7,6 +7,6 @@ require (
 	github.com/martinohmann/exit v0.0.8
 	github.com/spf13/cobra v1.3.0
 	github.com/stretchr/testify v1.7.0
-	github.com/zalando/go-keyring v0.1.1
+	github.com/zalando/go-keyring v0.2.0
 	golang.org/x/term v0.0.0-20210220032956-6a3ed077a48d
 )
